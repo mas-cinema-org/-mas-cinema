@@ -163,7 +163,7 @@ const DEFAULT_BUSINESS = {
   mapQuery: "Mas+Cinema+Al+Maqal+Dinar+Street+Basra+Iraq",
   groupAr: "جزء من مجموعة Horizon Basra", groupEn: "Part of Horizon Basra Company",
 };
-const DEFAULT_PRICING = { standard: 10000, vipExtra: 5000, glasses3d: 2000 };
+const DEFAULT_PRICING = { standard: 10000, glasses3d: 2000 };
 const DEFAULT_SNACKS = [
   { id: "popcorn", nameAr: "فشار كلاسيك", nameEn: "Classic Popcorn", descAr: "حجم كبير، بالزبدة", descEn: "Large, buttered", price: 4000 },
   { id: "drink", nameAr: "مشروب غازي", nameEn: "Fountain Drink", descAr: "حجم كبير", descEn: "Large, any flavor", price: 2500 },
@@ -234,13 +234,11 @@ function seededRandom(seed) {
   return function () { h = (h ^ (h << 13)) | 0; h = (h ^ (h >>> 17)) | 0; h = (h ^ (h << 5)) | 0; return ((h >>> 0) % 1000) / 1000; };
 }
 function generateSeatMap(seed) {
-  const rand = seededRandom(seed);
   const rows = ["A", "B", "C", "D", "E", "F", "G", "H"];
-  return rows.map((row, ri) => {
-    const isVip = ri >= 6;
+  return rows.map((row) => {
     const seats = Array.from({ length: 10 }, (_, i) => {
       const id = `${row}${i + 1}`;
-      return { id, type: isVip ? "vip" : "standard", booked: rand() < 0.22 };
+      return { id, type: "standard", booked: false };
     });
     return { row, seats };
   });
@@ -454,8 +452,7 @@ function PosTab({ movies, pricing, snacks, bookings, onSell }) {
     setSelectedSeats((prev) => (prev.find((s) => s.id === seat.id) ? prev.filter((s) => s.id !== seat.id) : [...prev, seat]));
   };
 
-  const seatPrice = { standard: pricing.standard, vip: pricing.standard + pricing.vipExtra };
-  const seatTotal = selectedSeats.reduce((sum, s) => sum + seatPrice[s.type], 0);
+  const seatTotal = selectedSeats.length * pricing.standard;
   const addonTotal = snacks.reduce((sum, s) => sum + (addons[s.id] || 0) * s.price, 0);
   const grandTotal = seatTotal + addonTotal;
 
@@ -550,7 +547,6 @@ function PosTab({ movies, pricing, snacks, bookings, onSell }) {
                 </div>
                 <div className="seat-legend">
                   <div className="legend-item"><span className="legend-swatch seat-standard" /> عادي · <Num>{fmtMoney(pricing.standard)}</Num></div>
-                  <div className="legend-item"><span className="legend-swatch seat-vip" /> VIP · <Num>{fmtMoney(pricing.standard + pricing.vipExtra)}</Num></div>
                   <div className="legend-item"><span className="legend-swatch seat-selected" /> محدد</div>
                   <div className="legend-item"><span className="legend-swatch seat-booked" /> محجوز</div>
                 </div>
@@ -608,6 +604,7 @@ function MovieForm({ initial, onSave, onCancel }) {
   const [f, setF] = useState(initial ? { ...initial, cast: (initial.cast || []).join(", ") } : blank);
   const [posterLoading, setPosterLoading] = useState(false);
   const [posterError, setPosterError] = useState("");
+  const [formError, setFormError] = useState("");
 
   const onPosterFile = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -627,10 +624,13 @@ function MovieForm({ initial, onSave, onCancel }) {
   const toggleGenre = (g) => setF((p) => ({ ...p, genres: p.genres.includes(g) ? p.genres.filter((x) => x !== g) : [...p.genres, g] }));
 
   const save = () => {
-    if (!f.titleAr.trim() || !f.titleEn.trim()) return;
+    if (!f.titleAr.trim()) { setFormError("لازم تكتب اسم الفيلم (بالعربي) على الأقل قبل الحفظ."); return; }
+    setFormError("");
+    const titleEn = f.titleEn.trim() || f.titleAr.trim();
     const record = {
       ...f,
-      id: f.id || slugify(f.titleEn),
+      titleEn,
+      id: f.id || slugify(titleEn),
       rating: Number(f.rating) || 0,
       duration: Number(f.duration) || 0,
       cast: f.cast.split(",").map((c) => c.trim()).filter(Boolean),
@@ -642,7 +642,7 @@ function MovieForm({ initial, onSave, onCancel }) {
     <div className="movie-form card">
       <div className="form-grid-2">
         <label className="field-label">الاسم (عربي)<input value={f.titleAr} onChange={(e) => setF((p) => ({ ...p, titleAr: e.target.value }))} /></label>
-        <label className="field-label">Title (English)<input value={f.titleEn} onChange={(e) => setF((p) => ({ ...p, titleEn: e.target.value }))} /></label>
+        <label className="field-label">Title (English) — اختياري<input value={f.titleEn} onChange={(e) => setF((p) => ({ ...p, titleEn: e.target.value }))} /></label>
       </div>
       <div className="form-grid-3">
         <label className="field-label">التقييم<input type="number" step="0.1" min="0" max="10" value={f.rating} onChange={(e) => setF((p) => ({ ...p, rating: e.target.value }))} /></label>
@@ -702,6 +702,7 @@ function MovieForm({ initial, onSave, onCancel }) {
       <label className="field-label">Synopsis (English)<textarea rows={3} value={f.synopsisEn} onChange={(e) => setF((p) => ({ ...p, synopsisEn: e.target.value }))} /></label>
       <label className="field-label">طاقم التمثيل (افصل بفاصلة)<input value={f.cast} onChange={(e) => setF((p) => ({ ...p, cast: e.target.value }))} placeholder="أ. الجبوري, ل. حسن" /></label>
       <div className="form-actions">
+        {formError && <span className="poster-hint poster-hint-error" style={{ marginInlineEnd: "auto" }}>{formError}</span>}
         <button className="btn-secondary" onClick={onCancel}>إلغاء</button>
         <button className="btn-primary" onClick={save}><Save size={15} /> حفظ الفيلم</button>
       </div>
@@ -765,9 +766,11 @@ function SettingsTab({ business, pricing, snacks, saveSettings }) {
   const [saved, setSaved] = useState(false);
 
   const updateSnack = (id, field, value) => setS((prev) => prev.map((x) => (x.id === id ? { ...x, [field]: value } : x)));
+  const addSnack = () => setS((prev) => [...prev, { id: genId("snack"), nameAr: "", nameEn: "", descAr: "", descEn: "", price: 0 }]);
+  const removeSnack = (id) => setS((prev) => prev.filter((x) => x.id !== id));
 
   const save = () => {
-    saveSettings({ business: b, pricing: { standard: Number(p.standard) || 0, vipExtra: Number(p.vipExtra) || 0, glasses3d: Number(p.glasses3d) || 0 }, snacks: s });
+    saveSettings({ business: b, pricing: { standard: Number(p.standard) || 0, glasses3d: Number(p.glasses3d) || 0 }, snacks: s });
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   };
 
@@ -800,7 +803,6 @@ function SettingsTab({ business, pricing, snacks, saveSettings }) {
       <h3>الأسعار</h3>
       <div className="card form-grid-3">
         <label className="field-label">سعر التذكرة العادية<input type="number" value={p.standard} onChange={(e) => setP((prev) => ({ ...prev, standard: e.target.value }))} /></label>
-        <label className="field-label">فرق سعر VIP<input type="number" value={p.vipExtra} onChange={(e) => setP((prev) => ({ ...prev, vipExtra: e.target.value }))} /></label>
         <label className="field-label">سعر نظارة 3D<input type="number" value={p.glasses3d} onChange={(e) => setP((prev) => ({ ...prev, glasses3d: e.target.value }))} /></label>
       </div>
 
@@ -811,8 +813,10 @@ function SettingsTab({ business, pricing, snacks, saveSettings }) {
             <span className="snack-edit-icon">{React.createElement(ICON_MAP[item.id] || Popcorn, { size: 16, color: "#D4AF37" })}</span>
             <input value={item.nameAr} onChange={(e) => updateSnack(item.id, "nameAr", e.target.value)} placeholder="الاسم" />
             <input type="number" value={item.price} onChange={(e) => updateSnack(item.id, "price", Number(e.target.value))} placeholder="السعر" />
+            <button type="button" className="btn-icon btn-icon-cancel" onClick={() => removeSnack(item.id)} title="حذف"><Trash2 size={14} /></button>
           </div>
         ))}
+        <button type="button" className="btn-secondary" style={{ marginTop: "10px" }} onClick={addSnack}><Plus size={15} /> أضف وجبة / عصير جديد</button>
       </div>
 
       <div className="form-actions">
