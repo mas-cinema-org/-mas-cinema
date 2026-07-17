@@ -284,6 +284,16 @@ function posterBg(movie, angle) {
   return { background: `linear-gradient(${angle}deg, ${movie.gradient[0]}, ${movie.gradient[1]})` };
 }
 
+/* Same as posterBg, but prefers the wide banner image (falls back to the
+   poster, then the gradient). Used for the hero and the detail backdrop,
+   which are wide sections — the poster stays reserved for the movie card. */
+function bannerBg(movie, angle) {
+  if (movie.banner) {
+    return { backgroundImage: `url(${movie.banner})`, backgroundSize: "cover", backgroundPosition: "center" };
+  }
+  return posterBg(movie, angle);
+}
+
 /* ------------------------------ Translations ----------------------------- */
 
 const TXT = {
@@ -481,16 +491,28 @@ function Hero({ t, lang, business, movies, onBook, onDetails }) {
   const [idx, setIdx] = useState(0);
   const timerRef = useRef(null);
   useEffect(() => {
+    if (!movies.length) return;
     timerRef.current = setInterval(() => setIdx((i) => (i + 1) % movies.length), 6000);
     return () => clearInterval(timerRef.current);
   }, [movies.length]);
 
-  const movie = movies[idx];
+  if (!movies.length) {
+    return (
+      <section className="hero hero-empty">
+        <div className="hero-content">
+          <h1 className="hero-title">{lang === "ar" ? "لا توجد أفلام معروضة حاليًا" : "No movies available right now"}</h1>
+          <p className="hero-tagline">{lang === "ar" ? "تابعونا قريبًا لمعرفة أحدث العروض" : "Check back soon for the latest showtimes"}</p>
+        </div>
+      </section>
+    );
+  }
+
+  const movie = movies[idx] || movies[0];
   const title = lang === "ar" ? movie.titleAr : movie.titleEn;
   const synopsis = lang === "ar" ? movie.synopsisAr : movie.synopsisEn;
 
   return (
-    <section className="hero" style={posterBg(movie, 120)}>
+    <section className="hero" style={bannerBg(movie, 120)}>
       <div className="hero-blur" />
       <div className="hero-overlay" />
       <div className="hero-content">
@@ -748,11 +770,17 @@ function MovieDetailStep({ t, lang, movie, selectedDate, setSelectedDate, select
   const synopsis = lang === "ar" ? movie.synopsisAr : movie.synopsisEn;
   return (
     <div className="step-body">
-      <div className="detail-backdrop" style={posterBg(movie, 140)}>
+      <div className="detail-backdrop" style={bannerBg(movie, 140)}>
         <div className="detail-backdrop-overlay" />
-        <button className={"trailer-play" + (playPulse ? " trailer-play-active" : "")} onClick={() => setPlayPulse((v) => !v)}>
-          <Play size={22} fill="#0B0C10" color="#0B0C10" />
-        </button>
+        {movie.trailerUrl && (
+          <a
+            className={"trailer-play" + (playPulse ? " trailer-play-active" : "")}
+            href={movie.trailerUrl} target="_blank" rel="noopener noreferrer"
+            onMouseEnter={() => setPlayPulse(true)} onMouseLeave={() => setPlayPulse(false)}
+          >
+            <Play size={22} fill="#0B0C10" color="#0B0C10" />
+          </a>
+        )}
         <div className="detail-backdrop-info"><h2>{title}</h2></div>
       </div>
 
@@ -791,7 +819,7 @@ function MovieDetailStep({ t, lang, movie, selectedDate, setSelectedDate, select
           </div>
           <h4 className="subheading">{t.selectShowtime}</h4>
           <div className="time-row">
-            {SHOW_TIMES.map((time) => (
+            {(movie.showtimes && movie.showtimes.length ? movie.showtimes : SHOW_TIMES).map((time) => (
               <button key={time} className={"time-pill" + (time === selectedTime ? " time-pill-active" : "")} onClick={() => setSelectedTime(time)}>
                 <Num>{time}</Num>
               </button>
@@ -1336,6 +1364,8 @@ const CSS = `
 
 /* ---------- Hero ---------- */
 .hero{ position:relative; min-height:500px; display:flex; align-items:flex-end; overflow:hidden; padding:56px 40px; }
+.hero-empty{ align-items:center; justify-content:center; text-align:center; background:linear-gradient(160deg, #1a1c22, #0B0C10); }
+.hero-empty .hero-content{ max-width:520px; }
 .hero-blur{ position:absolute; inset:0; background:radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.12), transparent 60%); filter:blur(40px); }
 .hero-overlay{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(11,12,16,0.2) 0%, rgba(11,12,16,0.75) 75%, var(--bg) 100%); }
 .hero-content{ position:relative; z-index:2; max-width:640px; }

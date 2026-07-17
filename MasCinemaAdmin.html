@@ -598,12 +598,16 @@ function compressImage(file, maxWidth = 500, quality = 0.82) {
 function MovieForm({ initial, onSave, onCancel }) {
   const blank = {
     id: "", titleAr: "", titleEn: "", genres: [], rating: 8, duration: 120, ageRating: "PG-13",
-    status: "showing", gradient: GRADIENT_PRESETS[0], poster: null, synopsisAr: "", synopsisEn: "", cast: "",
+    status: "showing", gradient: GRADIENT_PRESETS[0], poster: null, banner: null, trailerUrl: "",
+    synopsisAr: "", synopsisEn: "", cast: "", showtimes: [],
     releaseAr: "قريبًا", releaseEn: "Coming Soon",
   };
-  const [f, setF] = useState(initial ? { ...initial, cast: (initial.cast || []).join(", ") } : blank);
+  const [f, setF] = useState(initial ? { ...blank, ...initial, cast: (initial.cast || []).join(", ") } : blank);
   const [posterLoading, setPosterLoading] = useState(false);
   const [posterError, setPosterError] = useState("");
+  const [bannerLoading, setBannerLoading] = useState(false);
+  const [bannerError, setBannerError] = useState("");
+  const [timeInput, setTimeInput] = useState("");
   const [formError, setFormError] = useState("");
 
   const onPosterFile = async (e) => {
@@ -621,6 +625,29 @@ function MovieForm({ initial, onSave, onCancel }) {
     e.target.value = "";
   };
 
+  const onBannerFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setBannerError("");
+    setBannerLoading(true);
+    try {
+      const dataUrl = await compressImage(file, 1280);
+      setF((p) => ({ ...p, banner: dataUrl }));
+    } catch (err) {
+      setBannerError("تعذّر تحميل الصورة، جرّب صورة ثانية");
+    }
+    setBannerLoading(false);
+    e.target.value = "";
+  };
+
+  const addTime = () => {
+    const v = timeInput.trim();
+    if (!v) return;
+    setF((p) => ({ ...p, showtimes: [...p.showtimes, v] }));
+    setTimeInput("");
+  };
+  const removeTime = (i) => setF((p) => ({ ...p, showtimes: p.showtimes.filter((_, idx) => idx !== i) }));
+
   const toggleGenre = (g) => setF((p) => ({ ...p, genres: p.genres.includes(g) ? p.genres.filter((x) => x !== g) : [...p.genres, g] }));
 
   const save = () => {
@@ -634,6 +661,7 @@ function MovieForm({ initial, onSave, onCancel }) {
       rating: Number(f.rating) || 0,
       duration: Number(f.duration) || 0,
       cast: f.cast.split(",").map((c) => c.trim()).filter(Boolean),
+      trailerUrl: f.trailerUrl.trim(),
     };
     onSave(record);
   };
@@ -691,6 +719,31 @@ function MovieForm({ initial, onSave, onCancel }) {
           />
         </div>
       </label>
+      <label className="field-label">صورة عريضة (بانر يظهر بالأعلى) — اختياري
+        <div className="poster-field">
+          {f.banner ? (
+            <div className="poster-preview">
+              <img className="banner-preview-img" src={f.banner} alt="" />
+              <button type="button" className="btn-secondary" onClick={() => setF((p) => ({ ...p, banner: null }))}>إزالة الصورة</button>
+            </div>
+          ) : (
+            <div className="poster-preview poster-preview-empty banner-preview-empty" style={{ background: `linear-gradient(135deg, ${f.gradient[0]}, ${f.gradient[1]})` }}>
+              <span>بدون بانر — تُستخدم صورة البوستر بدلها</span>
+            </div>
+          )}
+          <input type="file" accept="image/*" onChange={onBannerFile} disabled={bannerLoading} />
+          {bannerLoading && <span className="poster-hint">جارِ ضغط الصورة...</span>}
+          {bannerError && <span className="poster-hint poster-hint-error">{bannerError}</span>}
+          <input
+            type="text" className="poster-url-input" placeholder="أو الصق رابط صورة عريضة مباشر (اختياري)"
+            value={f.banner && f.banner.startsWith("http") ? f.banner : ""}
+            onChange={(e) => setF((p) => ({ ...p, banner: e.target.value || null }))}
+          />
+        </div>
+      </label>
+      <label className="field-label">رابط التريلر الرسمي (يوتيوب مثلًا) — اختياري
+        <input type="text" placeholder="https://youtube.com/watch?v=..." value={f.trailerUrl} onChange={(e) => setF((p) => ({ ...p, trailerUrl: e.target.value }))} />
+      </label>
       <label className="field-label">الأنواع
         <div className="filter-genres">
           {GENRE_KEYS.map((g) => (
@@ -701,6 +754,28 @@ function MovieForm({ initial, onSave, onCancel }) {
       <label className="field-label">القصة (عربي)<textarea rows={3} value={f.synopsisAr} onChange={(e) => setF((p) => ({ ...p, synopsisAr: e.target.value }))} /></label>
       <label className="field-label">Synopsis (English)<textarea rows={3} value={f.synopsisEn} onChange={(e) => setF((p) => ({ ...p, synopsisEn: e.target.value }))} /></label>
       <label className="field-label">طاقم التمثيل (افصل بفاصلة)<input value={f.cast} onChange={(e) => setF((p) => ({ ...p, cast: e.target.value }))} placeholder="أ. الجبوري, ل. حسن" /></label>
+      <label className="field-label">أوقات العرض
+        <div className="showtime-editor">
+          {f.showtimes.length > 0 && (
+            <div className="showtime-chips">
+              {f.showtimes.map((tm, i) => (
+                <span className="chip chip-active showtime-chip" key={i}>
+                  <Num>{tm}</Num>
+                  <button type="button" className="showtime-chip-remove" onClick={() => removeTime(i)}><X size={11} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="showtime-add-row">
+            <input
+              type="text" placeholder="مثلًا: 6:30 م" value={timeInput}
+              onChange={(e) => setTimeInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTime(); } }}
+            />
+            <button type="button" className="btn-secondary" onClick={addTime}><Plus size={14} /> إضافة</button>
+          </div>
+        </div>
+      </label>
       <div className="form-actions">
         {formError && <span className="poster-hint poster-hint-error" style={{ marginInlineEnd: "auto" }}>{formError}</span>}
         <button className="btn-secondary" onClick={onCancel}>إلغاء</button>
@@ -1050,6 +1125,15 @@ const CSS = `
 .poster-hint{ font-size:12px; color:var(--text-dim); }
 .poster-hint-error{ color:var(--red); }
 .poster-url-input{ width:100%; }
+.banner-preview-img{ width:220px; height:90px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
+.banner-preview-empty{ width:220px; height:90px; }
+.showtime-editor{ display:flex; flex-direction:column; gap:10px; }
+.showtime-chips{ display:flex; flex-wrap:wrap; gap:8px; }
+.showtime-chip{ display:inline-flex; align-items:center; gap:6px; }
+.showtime-chip-remove{ display:flex; align-items:center; justify-content:center; background:transparent; border:none; color:inherit; cursor:pointer; padding:0; opacity:0.75; }
+.showtime-chip-remove:hover{ opacity:1; }
+.showtime-add-row{ display:flex; gap:8px; }
+.showtime-add-row input{ flex:1; }
 .movie-row-info{ flex:1; display:flex; flex-direction:column; gap:2px; }
 .movie-row-info strong{ font-size:13.5px; } .movie-row-info span{ font-size:11.5px; color:var(--text-dim); }
 
