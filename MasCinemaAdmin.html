@@ -843,7 +843,7 @@ function App() {
   const loadAll = useCallback(async () => {
     setRefreshing(true);
     const [m, settings, b] = await Promise.all([Store.get("mc_movies"), Store.get("mc_settings"), Store.get("mc_bookings")]);
-    if (Array.isArray(m) && m.length) setMovies(m);
+    if (Array.isArray(m)) setMovies(m);
     if (settings) {
       if (settings.business) setBusiness((prev) => ({ ...prev, ...settings.business }));
       if (settings.pricing) setPricing((prev) => ({ ...prev, ...settings.pricing }));

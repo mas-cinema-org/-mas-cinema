@@ -1156,7 +1156,7 @@ function App() {
     (async () => {
       const [m, settings] = await Promise.all([Store.get("mc_movies"), Store.get("mc_settings")]);
       if (cancelled) return;
-      if (Array.isArray(m) && m.length) setMovies(m);
+      if (Array.isArray(m)) setMovies(m);
       if (settings) {
         if (settings.business) setBusiness((prev) => ({ ...prev, ...settings.business }));
         if (settings.pricing) setPricing((prev) => ({ ...prev, ...settings.pricing }));
